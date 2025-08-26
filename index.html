@@ -97,6 +97,18 @@
             text-align: center; 
             max-width: 90%; 
         }
+        .mapboxgl-marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        #laundry-marker {
+            background-color: #ff0000;
+        }
+        #destination-marker {
+            background-color: #00f;
+        }
         @media (max-width: 600px) {
             button { flex: 1 1 100%; max-width: none; }
             #map { height: 250px; }
@@ -122,7 +134,7 @@
         <button onclick="calculateCost(false)">Get Cost (One-Way)</button>
         <button onclick="calculateCost(true)">Get Cost (Round-Trip)</button>
     </div>
-    <div id="cost-explain">Cost: R25 for up to 2km, plus R5 per km beyond 2km. Round-trip doubles the one-way cost.</div>
+    <div id="cost-explain">Cost: R25 for up to 2km, plus R5 per km beyond 2km, rounded up to the nearest R1. Round-trip doubles the one-way cost.</div>
     <div id="result"></div>
 
     <script>
@@ -136,6 +148,12 @@
             zoom: 13
         });
 
+        // Add marker for laundry location
+        new mapboxgl.Marker({ element: Object.assign(document.createElement('div'), { id: 'laundry-marker', className: 'mapboxgl-marker' }) })
+            .setLngLat(laundryCoord)
+            .setPopup(new mapboxgl.Popup().setText('GoldenLaundry: 28 Mafunka Crescent'))
+            .addTo(map);
+
         const geocoder = new MapboxGeocoder({
             accessToken: mapboxgl.accessToken,
             countries: 'za',
@@ -145,10 +163,16 @@
         geocoder.addTo(document.getElementById('geocoder-container'));
 
         let destCoord = null;
+        let destMarker = null;
 
         geocoder.on('result', (e) => {
             destCoord = e.result.center; // [lng, lat]
             map.flyTo({ center: destCoord });
+            if (destMarker) destMarker.remove();
+            destMarker = new mapboxgl.Marker({ element: Object.assign(document.createElement('div'), { id: 'destination-marker', className: 'mapboxgl-marker' }) })
+                .setLngLat(destCoord)
+                .setPopup(new mapboxgl.Popup().setText('Your Location'))
+                .addTo(map);
         });
 
         async function useCurrentLocation() {
@@ -156,6 +180,11 @@
                 navigator.geolocation.getCurrentPosition(async (position) => {
                     destCoord = [position.coords.longitude, position.coords.latitude];
                     map.flyTo({ center: destCoord });
+                    if (destMarker) destMarker.remove();
+                    destMarker = new mapboxgl.Marker({ element: Object.assign(document.createElement('div'), { id: 'destination-marker', className: 'mapboxgl-marker' }) })
+                        .setLngLat(destCoord)
+                        .setPopup(new mapboxgl.Popup().setText('Your Location'))
+                        .addTo(map);
                     try {
                         const res = await fetch(
                             `https://api.mapbox.com/geocoding/v5/mapbox.places/${destCoord[0]},${destCoord[1]}.json?access_token=${mapboxgl.accessToken}`
@@ -187,6 +216,7 @@
                 if (distanceKm > 2) {
                     cost += 5 * (distanceKm - 2);
                 }
+                cost = Math.ceil(cost); // Round up to nearest R1
                 if (isRoundTrip) cost *= 2;
                 document.getElementById('result').innerText = `Distance: ${distanceKm.toFixed(2)} km | Cost: R${cost.toFixed(2)} ${isRoundTrip ? '(Round-Trip)' : '(One-Way)'}`;
             } catch (e) {
