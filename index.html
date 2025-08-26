@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GoldenLaundry Cost Calculator</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 10px; 
+            font-family: 'Arial', sans-serif; 
+            background-color: #f4f4f4; 
+            color: #333; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            min-height: 100vh; 
+        }
+        h2 { 
+            text-align: center; 
+            color: #2c3e50; 
+            font-size: 24px; 
+            margin: 10px 0; 
+        }
+        p { 
+            text-align: center; 
+            font-size: 14px; 
+            margin: 5px 0; 
+            max-width: 90%; 
+        }
+        #map { 
+            height: 300px; 
+            width: 100%; 
+            max-width: 600px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            margin: 10px 0; 
+        }
+        .buttons { 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+            gap: 10px; 
+            margin: 10px 0; 
+            width: 100%; 
+            max-width: 600px; 
+        }
+        button { 
+            flex: 1 1 100px; 
+            padding: 15px; 
+            background-color: #3498db; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            max-width: 200px; 
+        }
+        button:hover { 
+            background-color: #2980b9; 
+        }
+        #result { 
+            text-align: center; 
+            font-size: 20px; 
+            font-weight: bold; 
+            color: #27ae60; 
+            margin: 20px 0; 
+            max-width: 90%; 
+        }
+        #cost-explain { 
+            font-size: 14px; 
+            color: #555; 
+            margin: 10px 0; 
+            text-align: center; 
+            max-width: 90%; 
+        }
+        @media (max-width: 600px) {
+            button { flex: 1 1 100%; max-width: none; }
+            #map { height: 250px; }
+        }
+    </style>
+</head>
+<body>
+    <h2>GoldenLaundry Pickup/Delivery Calculator</h2>
+    <p>Laundry at 28 Mafunka Crescent, Khayelitsha. Enter your address or tap 'Use My Location'.</p>
+    <div id="map"></div>
+    <div class="buttons">
+        <button onclick="useCurrentLocation()">Use My Location</button>
+        <button onclick="calculateCost(false)">One Way</button>
+        <button onclick="calculateCost(true)">Round Trip</button>
+    </div>
+    <div id="cost-explain">How we calculate: Minimum R25 per way + R10 per km. Round trip doubles the cost.</div>
+    <div id="result"></div>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1Ijoic2l5YW10aGFuZGEiLCJhIjoiY21lc2Izd2p4MDB1ZDJqc2NhbWU0ZG9rZCJ9.apQ_neXpB_oWnjDjFXMISg';
+        const laundryCoord = [18.674763, -34.030171]; // [lng, lat]
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: laundryCoord,
+            zoom: 13
+        });
+
+        const geocoder = new MapboxGeocoder({
+            accessToken: mapboxgl.accessToken,
+            countries: 'za',
+            bbox: [18.6, -34.1, 18.75, -33.95], // Khayelitsha bounds
+            placeholder: 'Search address in Khayelitsha'
+        });
+        geocoder.addTo(map);
+
+        let destCoord = null;
+
+        geocoder.on('result', (e) => {
+            destCoord = e.result.center; // [lng, lat]
+            map.flyTo({ center: destCoord });
+        });
+
+        function useCurrentLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    destCoord = [position.coords.longitude, position.coords.latitude];
+                    map.flyTo({ center: destCoord });
+                    geocoder.setInput(`${position.coords.latitude}, ${position.coords.longitude}`);
+                }, () => alert('Location access denied.'));
+            } else {
+                alert('Geolocation not supported.');
+            }
+        }
+
+        async function calculateCost(isRoundTrip) {
+            if (!destCoord) {
+                alert('Select address or location first.');
+                return;
+            }
+
+            const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${laundryCoord[0]},${laundryCoord[1]};${destCoord[0]},${destCoord[1]}?access_token=${mapboxgl.accessToken}`;
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                const distanceKm = data.routes[0].distance / 1000;
+                let cost = 25 + 10 * distanceKm;
+                if (isRoundTrip) cost *= 2;
+                document.getElementById('result').innerText = `Distance: ${distanceKm.toFixed(2)} km | Cost: R${cost.toFixed(2)}`;
+            } catch (e) {
+                alert('Error calculating. Check connection.');
+            }
+        }
+    </script>
+</body>
+</html>
