@@ -122,7 +122,7 @@
         <button onclick="calculateCost(false)">Get Cost (One-Way)</button>
         <button onclick="calculateCost(true)">Get Cost (Round-Trip)</button>
     </div>
-    <div id="cost-explain">Cost: R5 per km, with a minimum of R25 per way. Round-trip doubles the one-way cost.</div>
+    <div id="cost-explain">Cost: R25 for up to 2km, plus R5 per km beyond 2km. Round-trip doubles the one-way cost.</div>
     <div id="result"></div>
 
     <script>
@@ -183,7 +183,10 @@
                 const res = await fetch(url);
                 const data = await res.json();
                 const distanceKm = data.routes[0].distance / 1000;
-                let cost = Math.max(25, 5 * distanceKm);
+                let cost = 25;
+                if (distanceKm > 2) {
+                    cost += 5 * (distanceKm - 2);
+                }
                 if (isRoundTrip) cost *= 2;
                 document.getElementById('result').innerText = `Distance: ${distanceKm.toFixed(2)} km | Cost: R${cost.toFixed(2)} ${isRoundTrip ? '(Round-Trip)' : '(One-Way)'}`;
             } catch (e) {
