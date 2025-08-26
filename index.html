@@ -23,14 +23,21 @@
         h2 { 
             text-align: center; 
             color: #2c3e50; 
-            font-size: 24px; 
+            font-size: 28px; 
             margin: 10px 0; 
         }
         p { 
             text-align: center; 
-            font-size: 14px; 
+            font-size: 16px; 
             margin: 5px 0; 
             max-width: 90%; 
+        }
+        #instructions { 
+            font-size: 16px; 
+            color: #444; 
+            margin: 10px 0; 
+            max-width: 90%; 
+            line-height: 1.5; 
         }
         #map { 
             height: 300px; 
@@ -39,6 +46,11 @@
             border: 1px solid #ddd; 
             border-radius: 8px; 
             margin: 10px 0; 
+        }
+        #geocoder-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 10px 0;
         }
         .buttons { 
             display: flex; 
@@ -57,22 +69,29 @@
             border: none; 
             border-radius: 5px; 
             cursor: pointer; 
-            font-size: 16px; 
+            font-size: 18px; 
+            font-weight: bold; 
             max-width: 200px; 
         }
         button:hover { 
             background-color: #2980b9; 
         }
+        #location-btn {
+            background-color: #e67e22;
+        }
+        #location-btn:hover {
+            background-color: #d35400;
+        }
         #result { 
             text-align: center; 
-            font-size: 20px; 
+            font-size: 22px; 
             font-weight: bold; 
             color: #27ae60; 
             margin: 20px 0; 
             max-width: 90%; 
         }
         #cost-explain { 
-            font-size: 14px; 
+            font-size: 16px; 
             color: #555; 
             margin: 10px 0; 
             text-align: center; 
@@ -81,19 +100,29 @@
         @media (max-width: 600px) {
             button { flex: 1 1 100%; max-width: none; }
             #map { height: 250px; }
+            h2 { font-size: 24px; }
+            p, #instructions, #cost-explain { font-size: 14px; }
+            #result { font-size: 20px; }
         }
     </style>
 </head>
 <body>
     <h2>GoldenLaundry Pickup/Delivery Calculator</h2>
-    <p>Laundry at 28 Mafunka Crescent, Khayelitsha. Enter your address or tap 'Use My Location'.</p>
-    <div id="map"></div>
-    <div class="buttons">
-        <button onclick="useCurrentLocation()">Use My Location</button>
-        <button onclick="calculateCost(false)">One Way</button>
-        <button onclick="calculateCost(true)">Round Trip</button>
+    <p>Calculate the cost to pick up or deliver your laundry from 28 Mafunka Crescent, Khayelitsha.</p>
+    <div id="instructions">
+        <strong>How to use:</strong><br>
+        1. Type your address in the search box below the map or tap "Use My Location".<br>
+        2. Choose "Get Cost (One-Way)" for pickup or delivery, or "Get Cost (Round-Trip)" for both.<br>
+        3. See the distance and cost below.
     </div>
-    <div id="cost-explain">How we calculate: Minimum R25 per way + R10 per km. Round trip doubles the cost.</div>
+    <div id="map"></div>
+    <div id="geocoder-container"></div>
+    <div class="buttons">
+        <button id="location-btn" onclick="useCurrentLocation()">Use My Location</button>
+        <button onclick="calculateCost(false)">Get Cost (One-Way)</button>
+        <button onclick="calculateCost(true)">Get Cost (Round-Trip)</button>
+    </div>
+    <div id="cost-explain">Cost: R5 per km, with a minimum of R25 per way. Round-trip doubles the one-way cost.</div>
     <div id="result"></div>
 
     <script>
@@ -111,9 +140,9 @@
             accessToken: mapboxgl.accessToken,
             countries: 'za',
             bbox: [18.6, -34.1, 18.75, -33.95], // Khayelitsha bounds
-            placeholder: 'Search address in Khayelitsha'
+            placeholder: 'Enter your address in Khayelitsha'
         });
-        geocoder.addTo(map);
+        geocoder.addTo(document.getElementById('geocoder-container'));
 
         let destCoord = null;
 
@@ -122,21 +151,30 @@
             map.flyTo({ center: destCoord });
         });
 
-        function useCurrentLocation() {
+        async function useCurrentLocation() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((position) => {
+                navigator.geolocation.getCurrentPosition(async (position) => {
                     destCoord = [position.coords.longitude, position.coords.latitude];
                     map.flyTo({ center: destCoord });
-                    geocoder.setInput(`${position.coords.latitude}, ${position.coords.longitude}`);
-                }, () => alert('Location access denied.'));
+                    try {
+                        const res = await fetch(
+                            `https://api.mapbox.com/geocoding/v5/mapbox.places/${destCoord[0]},${destCoord[1]}.json?access_token=${mapboxgl.accessToken}`
+                        );
+                        const data = await res.json();
+                        const address = data.features[0]?.place_name || `${position.coords.latitude}, ${position.coords.longitude}`;
+                        geocoder.setInput(address);
+                    } catch (e) {
+                        geocoder.setInput(`${position.coords.latitude}, ${position.coords.longitude}`);
+                    }
+                }, () => alert('Location access denied. Please allow location or enter an address.'));
             } else {
-                alert('Geolocation not supported.');
+                alert('Your device does not support location services.');
             }
         }
 
         async function calculateCost(isRoundTrip) {
             if (!destCoord) {
-                alert('Select address or location first.');
+                alert('Please enter an address or use your location first.');
                 return;
             }
 
@@ -145,11 +183,11 @@
                 const res = await fetch(url);
                 const data = await res.json();
                 const distanceKm = data.routes[0].distance / 1000;
-                let cost = 25 + 10 * distanceKm;
+                let cost = Math.max(25, 5 * distanceKm);
                 if (isRoundTrip) cost *= 2;
-                document.getElementById('result').innerText = `Distance: ${distanceKm.toFixed(2)} km | Cost: R${cost.toFixed(2)}`;
+                document.getElementById('result').innerText = `Distance: ${distanceKm.toFixed(2)} km | Cost: R${cost.toFixed(2)} ${isRoundTrip ? '(Round-Trip)' : '(One-Way)'}`;
             } catch (e) {
-                alert('Error calculating. Check connection.');
+                alert('Error calculating cost. Check your internet connection.');
             }
         }
     </script>
